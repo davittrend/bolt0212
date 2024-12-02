@@ -1,13 +1,10 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { produce } from 'immer';
-import { onValue, ref, get, set, remove } from 'firebase/database';
-import { database } from '../firebase';
-import { auth } from '../firebase/auth';
-import { handleFirebaseError } from '../firebase/errors';
+import { storage } from '../storage/local';
 import { toast } from 'sonner';
+import { handleError } from '../errors';
 import type { AccountState, AccountStore } from './types';
-import type { PinterestAccount, PinterestBoard } from '@/types/pinterest';
 
 const initialState: AccountState = {
   accounts: [],
@@ -23,25 +20,19 @@ export const useAccountStore = create<AccountStore>()(
     (set, get) => ({
       ...initialState,
 
-      setAccounts: (accounts) => {
-        console.log('Setting accounts:', accounts);
-        set(
-          produce((state) => {
-            state.accounts = accounts;
-            state.error = null;
-          })
-        );
-      },
+      setAccounts: (accounts) => set(
+        produce((state) => {
+          state.accounts = accounts;
+          state.error = null;
+        })
+      ),
       
-      setSelectedAccount: (accountId) => {
-        console.log('Setting selected account:', accountId);
-        set(
-          produce((state) => {
-            state.selectedAccountId = accountId;
-            state.error = null;
-          })
-        );
-      },
+      setSelectedAccount: (accountId) => set(
+        produce((state) => {
+          state.selectedAccountId = accountId;
+          state.error = null;
+        })
+      ),
 
       setLoading: (loading) => set({ loading }),
       
@@ -51,28 +42,30 @@ export const useAccountStore = create<AccountStore>()(
       },
       
       addAccount: async (account) => {
-        const userId = auth.currentUser?.uid;
-        if (!userId) {
-          throw new Error('User not authenticated');
-        }
-
-        console.log('Adding account to Firebase:', account);
         try {
           get().setLoading(true);
-          const accountRef = ref(database, `users/${userId}/accounts/${account.id}`);
-          await set(accountRef, account);
+          console.log('Adding account:', account.id);
+
+          const result = await storage.accounts.save('test-user', account);
           
-          console.log('Account saved to Firebase, updating store');
+          if (!result.success) {
+            throw result.error;
+          }
+          
           set(
             produce((state) => {
               state.accounts = [...state.accounts, account];
               state.error = null;
             })
           );
+          
+          console.log('Account added successfully:', account.id);
         } catch (error) {
-          const handledError = handleFirebaseError(error);
-          console.error('Failed to add account:', handledError);
-          toast.error(`Failed to add account: ${handledError.message}`);
+          const handledError = handleError(error, { 
+            operation: 'Add Account',
+            silent: true
+          });
+          get().setError(handledError.message);
           throw handledError;
         } finally {
           get().setLoading(false);
@@ -80,28 +73,30 @@ export const useAccountStore = create<AccountStore>()(
       },
       
       setBoards: async (accountId, boards) => {
-        const userId = auth.currentUser?.uid;
-        if (!userId) {
-          throw new Error('User not authenticated');
-        }
-
-        console.log('Saving boards to Firebase:', { accountId, boardCount: boards.length });
         try {
           get().setLoading(true);
-          const boardsRef = ref(database, `users/${userId}/boards/${accountId}`);
-          await set(boardsRef, boards);
+          console.log('Setting boards for account:', accountId);
+
+          const result = await storage.boards.save('test-user', accountId, boards);
           
-          console.log('Boards saved to Firebase, updating store');
+          if (!result.success) {
+            throw result.error;
+          }
+          
           set(
             produce((state) => {
               state.boards[accountId] = boards;
               state.error = null;
             })
           );
+          
+          console.log('Boards updated successfully for account:', accountId);
         } catch (error) {
-          const handledError = handleFirebaseError(error);
-          console.error('Failed to save boards:', handledError);
-          toast.error(`Failed to save boards: ${handledError.message}`);
+          const handledError = handleError(error, { 
+            operation: 'Set Boards',
+            silent: true
+          });
+          get().setError(handledError.message);
           throw handledError;
         } finally {
           get().setLoading(false);
@@ -109,20 +104,23 @@ export const useAccountStore = create<AccountStore>()(
       },
 
       removeAccount: async (accountId) => {
-        const userId = auth.currentUser?.uid;
-        if (!userId) {
-          throw new Error('User not authenticated');
-        }
-
-        console.log('Removing account from Firebase:', accountId);
         try {
           get().setLoading(true);
-          await Promise.all([
-            remove(ref(database, `users/${userId}/accounts/${accountId}`)),
-            remove(ref(database, `users/${userId}/boards/${accountId}`))
-          ]);
+          console.log('Removing account:', accountId);
 
-          console.log('Account removed from Firebase, updating store');
+          const [accountResult, boardsResult] = await Promise.all([
+            storage.accounts.remove('test-user', accountId),
+            storage.boards.remove('test-user', accountId)
+          ]);
+          
+          if (!accountResult.success) {
+            throw accountResult.error;
+          }
+          
+          if (!boardsResult.success) {
+            throw boardsResult.error;
+          }
+
           set(
             produce((state) => {
               state.accounts = state.accounts.filter(a => a.id !== accountId);
@@ -133,10 +131,14 @@ export const useAccountStore = create<AccountStore>()(
               state.error = null;
             })
           );
+          
+          console.log('Account removed successfully:', accountId);
         } catch (error) {
-          const handledError = handleFirebaseError(error);
-          console.error('Failed to remove account:', handledError);
-          toast.error(`Failed to remove account: ${handledError.message}`);
+          const handledError = handleError(error, { 
+            operation: 'Remove Account',
+            silent: true
+          });
+          get().setError(handledError.message);
           throw handledError;
         } finally {
           get().setLoading(false);
@@ -144,11 +146,16 @@ export const useAccountStore = create<AccountStore>()(
       },
       
       getAccount: (accountId) => {
-        return get().accounts.find(a => a.id === accountId);
+        const account = get().accounts.find(a => a.id === accountId);
+        if (!account) {
+          const error = new Error(`Account not found: ${accountId}`);
+          get().setError(error.message);
+          throw error;
+        }
+        return account;
       },
 
-      initializeStore: async (userId) => {
-        console.log('Initializing store for user:', userId);
+      initializeStore: async () => {
         if (get().initialized) {
           console.log('Store already initialized');
           return;
@@ -156,109 +163,50 @@ export const useAccountStore = create<AccountStore>()(
 
         try {
           get().setLoading(true);
-          const accountsRef = ref(database, `users/${userId}/accounts`);
-          const boardsRef = ref(database, `users/${userId}/boards`);
+          console.log('Initializing store');
 
-          console.log('Fetching initial data from Firebase');
-          const [accountsSnapshot, boardsSnapshot] = await Promise.all([
-            get(accountsRef),
-            get(boardsRef)
+          const [accountsResult, boardsResult] = await Promise.all([
+            storage.accounts.getAll('test-user'),
+            storage.boards.getAll('test-user')
           ]);
 
-          const accounts: PinterestAccount[] = [];
-          accountsSnapshot.forEach((childSnapshot) => {
-            accounts.push({
-              id: childSnapshot.key!,
-              ...childSnapshot.val(),
-            });
-          });
+          if (!accountsResult.success) {
+            throw accountsResult.error;
+          }
 
-          const boards: Record<string, PinterestBoard[]> = {};
-          boardsSnapshot.forEach((childSnapshot) => {
-            boards[childSnapshot.key!] = childSnapshot.val();
-          });
+          if (!boardsResult.success) {
+            throw boardsResult.error;
+          }
 
-          console.log('Initial data loaded:', { accountCount: accounts.length, boardCount: Object.keys(boards).length });
           set(
             produce((state) => {
-              state.accounts = accounts;
-              state.boards = boards;
+              state.accounts = accountsResult.data || [];
+              state.boards = boardsResult.data || {};
               state.initialized = true;
-              state.selectedAccountId = accounts[0]?.id || null;
+              state.selectedAccountId = accountsResult.data?.[0]?.id || null;
               state.error = null;
             })
           );
 
-          // Set up real-time listeners
-          console.log('Setting up real-time listeners');
-          onValue(accountsRef, 
-            (snapshot) => {
-              const updatedAccounts: PinterestAccount[] = [];
-              snapshot.forEach((childSnapshot) => {
-                updatedAccounts.push({
-                  id: childSnapshot.key!,
-                  ...childSnapshot.val(),
-                });
-              });
-              
-              console.log('Accounts updated:', updatedAccounts.length);
-              set(
-                produce((state) => {
-                  state.accounts = updatedAccounts;
-                  if (state.selectedAccountId && !updatedAccounts.find(a => a.id === state.selectedAccountId)) {
-                    state.selectedAccountId = updatedAccounts[0]?.id || null;
-                  }
-                  state.error = null;
-                })
-              );
-            },
-            (error) => {
-              const handledError = handleFirebaseError(error);
-              console.error('Account sync error:', handledError);
-              set({ error: handledError.message });
-              toast.error(`Database sync error: ${handledError.message}`);
-            }
-          );
-
-          onValue(boardsRef,
-            (snapshot) => {
-              const updatedBoards: Record<string, PinterestBoard[]> = {};
-              snapshot.forEach((childSnapshot) => {
-                updatedBoards[childSnapshot.key!] = childSnapshot.val();
-              });
-              
-              console.log('Boards updated:', Object.keys(updatedBoards).length);
-              set(
-                produce((state) => {
-                  state.boards = updatedBoards;
-                  state.error = null;
-                })
-              );
-            },
-            (error) => {
-              const handledError = handleFirebaseError(error);
-              console.error('Board sync error:', handledError);
-              set({ error: handledError.message });
-              toast.error(`Board sync error: ${handledError.message}`);
-            }
-          );
+          console.log('Store initialized successfully');
         } catch (error) {
-          const handledError = handleFirebaseError(error);
-          console.error('Store initialization error:', handledError);
+          const handledError = handleError(error, { 
+            operation: 'Initialize Store',
+            silent: true
+          });
           set({ 
             error: handledError.message,
             initialized: true 
           });
-          toast.error(`Store initialization error: ${handledError.message}`);
           throw handledError;
         } finally {
           get().setLoading(false);
         }
-      }
+      },
     }),
     {
       name: 'pinterest-accounts',
-      version: 1,
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         selectedAccountId: state.selectedAccountId,
       }),

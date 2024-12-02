@@ -1,12 +1,10 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { produce } from 'immer';
-import { writeToDatabase, readFromDatabase, deleteFromDatabase } from '../firebase/database';
-import { auth } from '../firebase/auth';
-import { handleFirebaseError, logFirebaseError } from '../firebase/errors';
+import { storage } from '../storage/local';
 import { toast } from 'sonner';
 import type { AccountStore } from './types';
-import type { PinterestAccount, PinterestBoard } from '@/types/pinterest';
+import type { PinterestAccount } from '@/types/pinterest';
 
 const initialState: AccountStore = {
   accounts: [],
@@ -41,17 +39,13 @@ export const useAccountStore = create<AccountStore>()(
       setError: (error) => set({ error }),
       
       addAccount: async (account) => {
-        const userId = auth.currentUser?.uid;
-        if (!userId) {
-          const error = new Error('User not authenticated');
-          toast.error(error.message);
-          throw error;
-        }
-
         try {
           get().setLoading(true);
-          const path = `users/${userId}/accounts/${account.id}`;
-          await writeToDatabase(path, account);
+          const result = await storage.accounts.save('test-user', account);
+          
+          if (!result.success) {
+            throw result.error;
+          }
           
           set(
             produce((state) => {
@@ -62,26 +56,22 @@ export const useAccountStore = create<AccountStore>()(
           
           toast.success('Account added successfully');
         } catch (error) {
-          logFirebaseError('Add Account', error);
-          const handledError = handleFirebaseError(error);
-          throw handledError;
+          const message = error instanceof Error ? error.message : 'Failed to add account';
+          toast.error(message);
+          throw error;
         } finally {
           get().setLoading(false);
         }
       },
       
       setBoards: async (accountId, boards) => {
-        const userId = auth.currentUser?.uid;
-        if (!userId) {
-          const error = new Error('User not authenticated');
-          toast.error(error.message);
-          throw error;
-        }
-
         try {
           get().setLoading(true);
-          const path = `users/${userId}/boards/${accountId}`;
-          await writeToDatabase(path, boards);
+          const result = await storage.boards.save('test-user', accountId, boards);
+          
+          if (!result.success) {
+            throw result.error;
+          }
           
           set(
             produce((state) => {
@@ -92,28 +82,29 @@ export const useAccountStore = create<AccountStore>()(
           
           toast.success('Boards updated successfully');
         } catch (error) {
-          logFirebaseError('Set Boards', error);
-          const handledError = handleFirebaseError(error);
-          throw handledError;
+          const message = error instanceof Error ? error.message : 'Failed to update boards';
+          toast.error(message);
+          throw error;
         } finally {
           get().setLoading(false);
         }
       },
 
       removeAccount: async (accountId) => {
-        const userId = auth.currentUser?.uid;
-        if (!userId) {
-          const error = new Error('User not authenticated');
-          toast.error(error.message);
-          throw error;
-        }
-
         try {
           get().setLoading(true);
-          await Promise.all([
-            deleteFromDatabase(`users/${userId}/accounts/${accountId}`),
-            deleteFromDatabase(`users/${userId}/boards/${accountId}`)
+          const [accountResult, boardsResult] = await Promise.all([
+            storage.accounts.remove('test-user', accountId),
+            storage.boards.remove('test-user', accountId)
           ]);
+          
+          if (!accountResult.success) {
+            throw accountResult.error;
+          }
+          
+          if (!boardsResult.success) {
+            throw boardsResult.error;
+          }
 
           set(
             produce((state) => {
@@ -128,9 +119,9 @@ export const useAccountStore = create<AccountStore>()(
           
           toast.success('Account removed successfully');
         } catch (error) {
-          logFirebaseError('Remove Account', error);
-          const handledError = handleFirebaseError(error);
-          throw handledError;
+          const message = error instanceof Error ? error.message : 'Failed to remove account';
+          toast.error(message);
+          throw error;
         } finally {
           get().setLoading(false);
         }
@@ -146,24 +137,32 @@ export const useAccountStore = create<AccountStore>()(
         return account;
       },
 
-      initializeStore: async (userId: string) => {
+      initializeStore: async () => {
         if (get().initialized) return;
 
         try {
           get().setLoading(true);
-          console.log('Initializing store for user:', userId);
+          console.log('Initializing store');
 
-          const [accounts, boards] = await Promise.all([
-            readFromDatabase<PinterestAccount[]>(`users/${userId}/accounts`),
-            readFromDatabase<Record<string, PinterestBoard[]>>(`users/${userId}/boards`)
+          const [accountsResult, boardsResult] = await Promise.all([
+            storage.accounts.getAll('test-user'),
+            storage.boards.getAll('test-user')
           ]);
+
+          if (!accountsResult.success) {
+            throw accountsResult.error;
+          }
+
+          if (!boardsResult.success) {
+            throw boardsResult.error;
+          }
 
           set(
             produce((state) => {
-              state.accounts = accounts || [];
-              state.boards = boards || {};
+              state.accounts = accountsResult.data || [];
+              state.boards = boardsResult.data || {};
               state.initialized = true;
-              state.selectedAccountId = accounts?.[0]?.id || null;
+              state.selectedAccountId = accountsResult.data?.[0]?.id || null;
               state.error = null;
             })
           );
@@ -171,13 +170,13 @@ export const useAccountStore = create<AccountStore>()(
           console.log('Store initialized successfully');
           toast.success('Account data loaded successfully');
         } catch (error) {
-          logFirebaseError('Initialize Store', error);
-          const handledError = handleFirebaseError(error);
+          const message = error instanceof Error ? error.message : 'Failed to initialize store';
+          toast.error(message);
           set({ 
-            error: handledError.message,
+            error: message,
             initialized: true 
           });
-          throw handledError;
+          throw error;
         } finally {
           get().setLoading(false);
         }
@@ -186,10 +185,6 @@ export const useAccountStore = create<AccountStore>()(
     {
       name: 'pinterest-accounts',
       version: 1,
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        selectedAccountId: state.selectedAccountId,
-      }),
     }
   )
 );

@@ -1,22 +1,12 @@
 import { env } from '@/lib/config/env';
-import { 
-  PINTEREST_API_URL, 
-  PINTEREST_OAUTH_URL,
-  PINTEREST_SCOPES,
-  getPinterestRedirectUri,
-  getAuthorizationHeader
-} from './config';
-import { PinterestAuthError, PinterestAPIError } from './errors';
-import type { PinterestBoard, PinterestToken, PinterestUser } from '@/types/pinterest';
-
-export function getPinterestAuthUrl(): string {
-  const redirectUri = encodeURIComponent(getPinterestRedirectUri());
-  const state = crypto.randomUUID();
-  
-  return `${PINTEREST_OAUTH_URL}/?client_id=${env.VITE_PINTEREST_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=${PINTEREST_SCOPES}&state=${state}`;
-}
+import { PINTEREST_API_URL, getPinterestRedirectUri } from './config';
+import { APIError, ErrorCodes } from '../errors';
+import type { PinterestToken, PinterestUser, PinterestBoard } from '@/types/pinterest';
 
 export async function exchangePinterestCode(code: string): Promise<{ token: PinterestToken; user: PinterestUser }> {
+  console.group('Pinterest Code Exchange');
+  console.log('Exchanging code:', code.substring(0, 10) + '...');
+
   try {
     const response = await fetch('/.netlify/functions/pinterest', {
       method: 'POST',
@@ -32,30 +22,40 @@ export async function exchangePinterestCode(code: string): Promise<{ token: Pint
     const data = await response.json();
 
     if (!response.ok) {
-      throw new PinterestAuthError(
+      console.error('Code exchange failed:', {
+        status: response.status,
+        error: data
+      });
+      throw new APIError(
         data.message || 'Failed to exchange Pinterest code',
-        data.code,
-        data.details
+        ErrorCodes.API.UNAUTHORIZED,
+        data
       );
     }
 
+    console.log('Code exchange successful');
     return data;
   } catch (error) {
-    if (error instanceof PinterestAuthError) {
+    console.error('Code exchange error:', error);
+    if (error instanceof APIError) {
       throw error;
     }
-    throw new PinterestAuthError(
-      'Failed to connect to Pinterest',
-      'NETWORK_ERROR',
+    throw new APIError(
+      'Failed to connect to Pinterest API',
+      ErrorCodes.API.NETWORK_ERROR,
       error
     );
+  } finally {
+    console.groupEnd();
   }
 }
 
 export async function fetchPinterestBoards(accessToken: string): Promise<PinterestBoard[]> {
+  console.group('Pinterest Boards Fetch');
+  console.log('Fetching boards with token:', accessToken.substring(0, 10) + '...');
+
   try {
-    const response = await fetch('/.netlify/functions/pinterest', {
-      method: 'GET',
+    const response = await fetch(`${PINTEREST_API_URL}/boards`, {
       headers: { 
         'Authorization': `Bearer ${accessToken}`,
         'Accept': 'application/json'
@@ -65,22 +65,31 @@ export async function fetchPinterestBoards(accessToken: string): Promise<Pintere
     const data = await response.json();
 
     if (!response.ok) {
-      throw new PinterestAPIError(
+      console.error('Boards fetch failed:', {
+        status: response.status,
+        error: data
+      });
+      throw new APIError(
         data.message || 'Failed to fetch boards',
-        data.code,
-        data.details
+        ErrorCodes.API.UNAUTHORIZED,
+        data
       );
     }
 
-    return data.items || [];
+    const boards = data.items || [];
+    console.log(`Successfully fetched ${boards.length} boards`);
+    return boards;
   } catch (error) {
-    if (error instanceof PinterestAPIError) {
+    console.error('Boards fetch error:', error);
+    if (error instanceof APIError) {
       throw error;
     }
-    throw new PinterestAPIError(
+    throw new APIError(
       'Failed to fetch Pinterest boards',
-      'NETWORK_ERROR',
+      ErrorCodes.API.NETWORK_ERROR,
       error
     );
+  } finally {
+    console.groupEnd();
   }
 }

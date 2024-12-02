@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { connectPinterestAccount } from '@/lib/pinterest/account';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { PinterestAuthError, PinterestAPIError } from '@/lib/pinterest/errors';
+import { handleError } from '@/lib/errors';
 
 export function PinterestCallback() {
   const navigate = useNavigate();
@@ -11,9 +11,16 @@ export function PinterestCallback() {
   const { user, loading } = useAuth();
 
   useEffect(() => {
+    let mounted = true;
+
     const processCallback = async () => {
+      console.group('Pinterest Callback Processing');
+
       try {
-        if (loading) return;
+        if (loading) {
+          console.log('Still loading auth state...');
+          return;
+        }
 
         if (!user) {
           console.log('No authenticated user, redirecting to signin');
@@ -27,42 +34,50 @@ export function PinterestCallback() {
         const errorDescription = searchParams.get('error_description');
         const state = searchParams.get('state');
 
+        console.log('Callback parameters:', {
+          hasCode: !!code,
+          error,
+          errorDescription,
+          state
+        });
+
         if (error) {
-          console.error('Pinterest authorization error:', { error, description: errorDescription });
-          toast.error(errorDescription || `Pinterest authorization failed: ${error}`);
-          navigate('/dashboard/accounts', { replace: true });
-          return;
+          throw new Error(errorDescription || `Pinterest authorization failed: ${error}`);
         }
 
         if (!code || !state) {
-          console.error('Invalid callback parameters');
-          toast.error('Invalid Pinterest callback URL');
-          navigate('/dashboard/accounts', { replace: true });
-          return;
+          throw new Error('Invalid callback parameters');
         }
 
         setIsProcessing(true);
         await connectPinterestAccount(code);
-        toast.success('Pinterest account connected successfully!');
-        navigate('/dashboard/accounts', { replace: true });
-      } catch (error) {
-        console.error('Error processing Pinterest callback:', error);
-        
-        if (error instanceof PinterestAuthError) {
-          toast.error(`Authentication failed: ${error.message}`);
-        } else if (error instanceof PinterestAPIError) {
-          toast.error(`Pinterest API error: ${error.message}`);
-        } else {
-          toast.error('Failed to connect Pinterest account. Please try again.');
+
+        if (mounted) {
+          toast.success('Pinterest account connected successfully!');
+          navigate('/dashboard/accounts', { replace: true });
         }
+      } catch (error) {
+        console.error('Callback processing failed:', error);
         
-        navigate('/dashboard/accounts', { replace: true });
+        if (mounted) {
+          const handledError = handleError(error, { 
+            operation: 'Process Pinterest Callback'
+          });
+          navigate('/dashboard/accounts', { replace: true });
+        }
       } finally {
-        setIsProcessing(false);
+        if (mounted) {
+          setIsProcessing(false);
+        }
+        console.groupEnd();
       }
     };
 
     processCallback();
+
+    return () => {
+      mounted = false;
+    };
   }, [navigate, user, loading]);
 
   return (
