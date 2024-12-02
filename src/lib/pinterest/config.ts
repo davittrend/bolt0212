@@ -1,6 +1,4 @@
-import { env } from '@/lib/config/env';
-
-export const PINTEREST_API_URL = env.VITE_PINTEREST_API_URL;
+export const PINTEREST_API_URL = 'https://api.pinterest.com/v5';
 export const PINTEREST_OAUTH_URL = 'https://www.pinterest.com/oauth';
 
 export const PINTEREST_SCOPES = [
@@ -9,19 +7,12 @@ export const PINTEREST_SCOPES = [
   'pins:write',
   'user_accounts:read',
   'boards:write'
-] as const;
+].join(',');
 
 export function getPinterestRedirectUri(): string {
-  // In development, use the Vite dev server URL
-  if (import.meta.env.DEV) {
-    return `${window.location.origin}/callback`;
-  }
-  
-  // In production, use the NETLIFY_URL environment variable or fallback to window.location
-  const netlifyUrl = import.meta.env.VITE_NETLIFY_URL;
-  return netlifyUrl 
-    ? `${netlifyUrl}/callback`
-    : `${window.location.origin}/callback`;
+  return typeof window !== 'undefined' 
+    ? `${window.location.origin}/callback`
+    : '';
 }
 
 export function getAuthorizationHeader(clientId: string, clientSecret: string): string {

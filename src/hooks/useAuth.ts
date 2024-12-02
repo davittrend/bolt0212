@@ -14,14 +14,14 @@ export function useAuth() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
       auth,
-      async (currentUser) => {
+      (currentUser) => {
         setUser(currentUser);
         setLoading(false);
         setError(null);
 
         if (currentUser) {
           try {
-            await initializeStore(currentUser.uid);
+            initializeStore(currentUser.uid);
           } catch (err) {
             const error = handleFirebaseError(err);
             setError(error);

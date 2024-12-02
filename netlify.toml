@@ -24,13 +24,3 @@
   to = "/.netlify/functions/:splat"
   status = 200
   force = true
-
-# Add environment variables
-[context.production.environment]
-  VITE_NETLIFY_URL = "https://${NETLIFY_SITE_NAME}.netlify.app"
-
-[context.deploy-preview.environment]
-  VITE_NETLIFY_URL = "${DEPLOY_PRIME_URL}"
-
-[context.branch-deploy.environment]
-  VITE_NETLIFY_URL = "${DEPLOY_PRIME_URL}"

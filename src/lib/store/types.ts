@@ -9,7 +9,7 @@ export interface AccountState {
   error: string | null;
 }
 
-export interface AccountActions {
+export interface AccountStore extends AccountState {
   setAccounts: (accounts: PinterestAccount[]) => void;
   setSelectedAccount: (accountId: string | null) => void;
   addAccount: (account: PinterestAccount) => Promise<void>;
@@ -20,5 +20,3 @@ export interface AccountActions {
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
 }
-
-export type AccountStore = AccountState & AccountActions;

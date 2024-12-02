@@ -4,7 +4,6 @@ import { routes } from '@/routes';
 import { Toaster } from 'sonner';
 import { useEffect, useState } from 'react';
 import { getApps } from 'firebase/app';
-import { env } from '@/lib/config/env';
 
 const router = createBrowserRouter([
   {
@@ -18,19 +17,12 @@ export default function App() {
 
   useEffect(() => {
     try {
-      // Verify environment variables
-      if (!env) {
-        throw new Error('Environment variables not properly configured');
-      }
-
       // Verify Firebase initialization
       if (getApps().length === 0) {
         throw new Error('Firebase failed to initialize');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to initialize application';
-      console.error('Initialization error:', err);
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to initialize application');
     }
   }, []);
 
