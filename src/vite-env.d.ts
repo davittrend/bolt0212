@@ -13,7 +13,9 @@ interface ImportMetaEnv {
   readonly VITE_PINTEREST_API_URL: string;
   readonly VITE_PINTEREST_CLIENT_ID: string;
   readonly VITE_PINTEREST_CLIENT_SECRET: string;
-  readonly VITE_PINTEREST_REDIRECT_URI: string;
+
+  // Netlify Config
+  readonly VITE_NETLIFY_URL?: string;
 }
 
 interface ImportMeta {
