@@ -1,24 +1,6 @@
 import fetch from 'cross-fetch';
 import { PINTEREST_API_URL } from './config';
 
-export const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Max-Age': '86400',
-};
-
-export function createResponse(statusCode: number, body: unknown) {
-  return {
-    statusCode,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  };
-}
-
 interface FetchOptions extends RequestInit {
   body?: string;
 }

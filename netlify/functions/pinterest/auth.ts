@@ -1,6 +1,6 @@
 import { Handler } from '@netlify/functions';
 import { corsHeaders, createResponse, fetchFromPinterest } from './utils';
-import { validateConfig, PINTEREST_API_URL } from './config';
+import { validateConfig } from './config';
 import { URLSearchParams } from 'url';
 
 export const handler: Handler = async (event) => {
@@ -17,7 +17,7 @@ export const handler: Handler = async (event) => {
     const config = validateConfig({ clientId, clientSecret, redirectUri });
 
     // Exchange code for token
-    const tokenResponse = await fetchFromPinterest('/oauth/token', {
+    const tokenResult = await fetchFromPinterest('/oauth/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -30,16 +30,24 @@ export const handler: Handler = async (event) => {
       }).toString(),
     });
 
+    if (!tokenResult.ok) {
+      return createResponse(tokenResult.status, tokenResult.data);
+    }
+
     // Fetch user data
-    const userData = await fetchFromPinterest('/user_account', {
+    const userResult = await fetchFromPinterest('/user_account', {
       headers: {
-        'Authorization': `Bearer ${tokenResponse.access_token}`,
+        'Authorization': `Bearer ${tokenResult.data.access_token}`,
       },
     });
 
+    if (!userResult.ok) {
+      return createResponse(userResult.status, userResult.data);
+    }
+
     return createResponse(200, {
-      token: tokenResponse,
-      user: userData,
+      token: tokenResult.data,
+      user: userResult.data,
     });
   } catch (error) {
     console.error('Pinterest authentication error:', error);

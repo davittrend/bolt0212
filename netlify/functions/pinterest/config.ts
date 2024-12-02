@@ -1,15 +1,28 @@
-import { z } from 'zod';
-
 export const PINTEREST_API_URL = 'https://api.pinterest.com/v5';
+export const PINTEREST_OAUTH_URL = 'https://www.pinterest.com/oauth';
 
-const configSchema = z.object({
-  clientId: z.string(),
-  clientSecret: z.string(),
-  redirectUri: z.string().url(),
-});
+export const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+};
 
-export type PinterestConfig = z.infer<typeof configSchema>;
+interface PinterestConfig {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}
 
-export function validateConfig(config: unknown): PinterestConfig {
-  return configSchema.parse(config);
+export function validateConfig(config: Partial<PinterestConfig>): PinterestConfig {
+  if (!config.clientId) {
+    throw new Error('Pinterest client ID is required');
+  }
+  if (!config.clientSecret) {
+    throw new Error('Pinterest client secret is required');
+  }
+  if (!config.redirectUri) {
+    throw new Error('Pinterest redirect URI is required');
+  }
+  return config as PinterestConfig;
 }

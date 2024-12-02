@@ -16,13 +16,17 @@ export const handler: Handler = async (event) => {
       return createResponse(401, { error: 'No access token provided' });
     }
 
-    const data = await fetchFromPinterest('/boards', {
+    const result = await fetchFromPinterest('/boards', {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
       },
     });
 
-    return createResponse(200, data);
+    if (!result.ok) {
+      return createResponse(result.status, result.data);
+    }
+
+    return createResponse(200, result.data);
   } catch (error) {
     console.error('Pinterest boards error:', error);
     return createResponse(500, {

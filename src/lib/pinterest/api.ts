@@ -3,7 +3,8 @@ import {
   PINTEREST_API_URL, 
   PINTEREST_OAUTH_URL,
   PINTEREST_SCOPES,
-  getPinterestRedirectUri
+  getPinterestRedirectUri,
+  getAuthorizationHeader
 } from './config';
 import { PinterestAuthError, PinterestAPIError } from './errors';
 import type { PinterestBoard, PinterestToken, PinterestUser } from '@/types/pinterest';
@@ -53,7 +54,8 @@ export async function exchangePinterestCode(code: string): Promise<{ token: Pint
 
 export async function fetchPinterestBoards(accessToken: string): Promise<PinterestBoard[]> {
   try {
-    const response = await fetch(`${PINTEREST_API_URL}/boards`, {
+    const response = await fetch('/.netlify/functions/pinterest', {
+      method: 'GET',
       headers: { 
         'Authorization': `Bearer ${accessToken}`,
         'Accept': 'application/json'

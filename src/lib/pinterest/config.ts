@@ -14,3 +14,7 @@ export function getPinterestRedirectUri(): string {
     ? `${window.location.origin}/callback`
     : '';
 }
+
+export function getAuthorizationHeader(clientId: string, clientSecret: string): string {
+  return `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+}

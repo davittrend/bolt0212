@@ -8,9 +8,15 @@ class FirebaseInitializer {
     if (!this.instance) {
       try {
         const config = validateFirebaseConfig();
+        
+        // Log initialization attempt without exposing sensitive data
+        console.log('Initializing Firebase app...');
+        
         this.instance = getApps().length === 0 
           ? initializeApp(config) 
           : getApps()[0];
+        
+        console.log('Firebase app initialized successfully');
       } catch (error) {
         console.error('Failed to initialize Firebase:', error);
         throw error;
