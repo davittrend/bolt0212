@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
-import { getPinterestAuthUrl, fetchPinterestBoards } from '@/lib/pinterest/api';
+import { createPinterestAuthUrl } from '@/lib/pinterest/api';
 import { useAccountStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { Trash2, RefreshCw } from 'lucide-react';
@@ -28,7 +28,7 @@ export function Accounts() {
   const handleConnectPinterest = async () => {
     try {
       setIsConnecting(true);
-      const authUrl = getPinterestAuthUrl();
+      const authUrl = createPinterestAuthUrl();
       window.location.href = authUrl;
     } catch (error) {
       toast.error('Failed to connect to Pinterest');

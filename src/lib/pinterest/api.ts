@@ -1,7 +1,14 @@
 import { env } from '@/lib/config/env';
-import { PINTEREST_API_URL, getPinterestRedirectUri } from './config';
+import { PINTEREST_API_URL, PINTEREST_OAUTH_URL, PINTEREST_SCOPES, getPinterestRedirectUri } from './config';
 import { APIError, ErrorCodes } from '../errors';
 import type { PinterestToken, PinterestUser, PinterestBoard } from '@/types/pinterest';
+
+export function createPinterestAuthUrl(): string {
+  const redirectUri = encodeURIComponent(getPinterestRedirectUri());
+  const state = crypto.randomUUID();
+  
+  return `${PINTEREST_OAUTH_URL}/?client_id=${env.VITE_PINTEREST_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=${PINTEREST_SCOPES}&state=${state}`;
+}
 
 export async function exchangePinterestCode(code: string): Promise<{ token: PinterestToken; user: PinterestUser }> {
   console.group('Pinterest Code Exchange');
@@ -55,7 +62,8 @@ export async function fetchPinterestBoards(accessToken: string): Promise<Pintere
   console.log('Fetching boards with token:', accessToken.substring(0, 10) + '...');
 
   try {
-    const response = await fetch(`${PINTEREST_API_URL}/boards`, {
+    const response = await fetch('/.netlify/functions/pinterest', {
+      method: 'GET',
       headers: { 
         'Authorization': `Bearer ${accessToken}`,
         'Accept': 'application/json'

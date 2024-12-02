@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { useAccountStore } from '@/lib/store';
 import { handleError } from '@/lib/errors';
-import { toast } from 'sonner';
+
+interface User {
+  id: string;
+  email: string;
+}
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -14,43 +16,42 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true;
 
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      async (currentUser) => {
-        if (!mounted) return;
-
-        try {
-          setUser(currentUser);
-          
-          if (currentUser) {
-            console.log('User authenticated, initializing store...');
-            await initializeStore();
-            console.log('Store initialized successfully');
-          }
-        } catch (err) {
+    const checkAuth = async () => {
+      try {
+        // For testing, create a mock user
+        const mockUser = {
+          id: 'test-user',
+          email: 'test@example.com'
+        };
+        
+        if (mounted) {
+          setUser(mockUser);
+          console.log('User authenticated, initializing store...');
+          await initializeStore();
+          console.log('Store initialized successfully');
+        }
+      } catch (err) {
+        console.error('Error in Auth State Change');
+        console.error('Error details:', err);
+        
+        if (mounted) {
           const error = handleError(err, { 
             operation: 'Auth State Change',
-            silent: true // Already handled by store
+            silent: true
           });
           setError(error);
-        } finally {
+        }
+      } finally {
+        if (mounted) {
           setLoading(false);
         }
-      },
-      (error) => {
-        if (!mounted) return;
-        
-        const handledError = handleError(error, { 
-          operation: 'Auth State Change' 
-        });
-        setError(handledError);
-        setLoading(false);
       }
-    );
+    };
+
+    checkAuth();
 
     return () => {
       mounted = false;
-      unsubscribe();
     };
   }, [initializeStore]);
 

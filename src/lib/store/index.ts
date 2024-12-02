@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { produce } from 'immer';
-import { storage } from '../storage/local';
+import { storage } from '@/lib/storage/local';
 import { toast } from 'sonner';
-import { handleError } from '../errors';
+import { handleError } from '@/lib/errors';
 import type { AccountState, AccountStore } from './types';
+import type { PinterestAccount } from '@/types/pinterest';
 
 const initialState: AccountState = {
   accounts: [],
@@ -20,19 +21,21 @@ export const useAccountStore = create<AccountStore>()(
     (set, get) => ({
       ...initialState,
 
-      setAccounts: (accounts) => set(
-        produce((state) => {
+      setAccounts: (accounts) => {
+        console.log('Setting accounts:', accounts);
+        set(produce(state => {
           state.accounts = accounts;
           state.error = null;
-        })
-      ),
+        }));
+      },
       
-      setSelectedAccount: (accountId) => set(
-        produce((state) => {
+      setSelectedAccount: (accountId) => {
+        console.log('Setting selected account:', accountId);
+        set(produce(state => {
           state.selectedAccountId = accountId;
           state.error = null;
-        })
-      ),
+        }));
+      },
 
       setLoading: (loading) => set({ loading }),
       
@@ -45,27 +48,20 @@ export const useAccountStore = create<AccountStore>()(
         try {
           get().setLoading(true);
           console.log('Adding account:', account.id);
-
-          const result = await storage.accounts.save('test-user', account);
           
+          const result = await storage.accounts.save('test-user', account);
           if (!result.success) {
             throw result.error;
           }
           
-          set(
-            produce((state) => {
-              state.accounts = [...state.accounts, account];
-              state.error = null;
-            })
-          );
+          set(produce(state => {
+            state.accounts.push(account);
+            state.error = null;
+          }));
           
-          console.log('Account added successfully:', account.id);
+          toast.success('Account added successfully');
         } catch (error) {
-          const handledError = handleError(error, { 
-            operation: 'Add Account',
-            silent: true
-          });
-          get().setError(handledError.message);
+          const handledError = handleError(error, { operation: 'Add Account' });
           throw handledError;
         } finally {
           get().setLoading(false);
@@ -76,27 +72,20 @@ export const useAccountStore = create<AccountStore>()(
         try {
           get().setLoading(true);
           console.log('Setting boards for account:', accountId);
-
-          const result = await storage.boards.save('test-user', accountId, boards);
           
+          const result = await storage.boards.save('test-user', accountId, boards);
           if (!result.success) {
             throw result.error;
           }
           
-          set(
-            produce((state) => {
-              state.boards[accountId] = boards;
-              state.error = null;
-            })
-          );
+          set(produce(state => {
+            state.boards[accountId] = boards;
+            state.error = null;
+          }));
           
-          console.log('Boards updated successfully for account:', accountId);
+          toast.success('Boards updated successfully');
         } catch (error) {
-          const handledError = handleError(error, { 
-            operation: 'Set Boards',
-            silent: true
-          });
-          get().setError(handledError.message);
+          const handledError = handleError(error, { operation: 'Set Boards' });
           throw handledError;
         } finally {
           get().setLoading(false);
@@ -107,38 +96,27 @@ export const useAccountStore = create<AccountStore>()(
         try {
           get().setLoading(true);
           console.log('Removing account:', accountId);
-
+          
           const [accountResult, boardsResult] = await Promise.all([
             storage.accounts.remove('test-user', accountId),
             storage.boards.remove('test-user', accountId)
           ]);
           
-          if (!accountResult.success) {
-            throw accountResult.error;
-          }
-          
-          if (!boardsResult.success) {
-            throw boardsResult.error;
-          }
+          if (!accountResult.success) throw accountResult.error;
+          if (!boardsResult.success) throw boardsResult.error;
 
-          set(
-            produce((state) => {
-              state.accounts = state.accounts.filter(a => a.id !== accountId);
-              delete state.boards[accountId];
-              if (state.selectedAccountId === accountId) {
-                state.selectedAccountId = state.accounts[0]?.id || null;
-              }
-              state.error = null;
-            })
-          );
+          set(produce(state => {
+            state.accounts = state.accounts.filter(a => a.id !== accountId);
+            delete state.boards[accountId];
+            if (state.selectedAccountId === accountId) {
+              state.selectedAccountId = state.accounts[0]?.id || null;
+            }
+            state.error = null;
+          }));
           
-          console.log('Account removed successfully:', accountId);
+          toast.success('Account removed successfully');
         } catch (error) {
-          const handledError = handleError(error, { 
-            operation: 'Remove Account',
-            silent: true
-          });
-          get().setError(handledError.message);
+          const handledError = handleError(error, { operation: 'Remove Account' });
           throw handledError;
         } finally {
           get().setLoading(false);
@@ -148,9 +126,7 @@ export const useAccountStore = create<AccountStore>()(
       getAccount: (accountId) => {
         const account = get().accounts.find(a => a.id === accountId);
         if (!account) {
-          const error = new Error(`Account not found: ${accountId}`);
-          get().setError(error.message);
-          throw error;
+          throw new Error('Account not found');
         }
         return account;
       },
@@ -170,30 +146,20 @@ export const useAccountStore = create<AccountStore>()(
             storage.boards.getAll('test-user')
           ]);
 
-          if (!accountsResult.success) {
-            throw accountsResult.error;
-          }
+          if (!accountsResult.success) throw accountsResult.error;
+          if (!boardsResult.success) throw boardsResult.error;
 
-          if (!boardsResult.success) {
-            throw boardsResult.error;
-          }
-
-          set(
-            produce((state) => {
-              state.accounts = accountsResult.data || [];
-              state.boards = boardsResult.data || {};
-              state.initialized = true;
-              state.selectedAccountId = accountsResult.data?.[0]?.id || null;
-              state.error = null;
-            })
-          );
+          set(produce(state => {
+            state.accounts = accountsResult.data || [];
+            state.boards = boardsResult.data || {};
+            state.initialized = true;
+            state.selectedAccountId = accountsResult.data?.[0]?.id || null;
+            state.error = null;
+          }));
 
           console.log('Store initialized successfully');
         } catch (error) {
-          const handledError = handleError(error, { 
-            operation: 'Initialize Store',
-            silent: true
-          });
+          const handledError = handleError(error, { operation: 'Initialize Store' });
           set({ 
             error: handledError.message,
             initialized: true 
@@ -202,12 +168,13 @@ export const useAccountStore = create<AccountStore>()(
         } finally {
           get().setLoading(false);
         }
-      },
+      }
     }),
     {
       name: 'pinterest-accounts',
-      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        accounts: state.accounts,
+        boards: state.boards,
         selectedAccountId: state.selectedAccountId,
       }),
     }
